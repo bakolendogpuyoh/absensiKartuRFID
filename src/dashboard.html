@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard Absensi - IoT</title>
+
+<!-- Tabler CSS (CDN stabil) -->
+<link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0/dist/css/tabler.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0/dist/css/tabler-vendors.min.css" rel="stylesheet">
+
+<style>
+  body { padding: 20px; }
+  .table-fixed { table-layout: fixed; word-wrap: break-word; }
+
+  .badge {
+    color: #fff;
+  }
+
+  .badge.bg-secondary {
+    color: #fff;
+  }
+</style>
+
+</head>
+<body>
+
+<div class="page">
+<div class="container-xl">
+
+    <h2 class="page-title mb-3">Dashboard Absensi</h2>
+
+    <!-- FILTER -->
+    <div class="row mb-3">
+        <div class="col-md-3">
+            <label for="datePicker" class="form-label">Tanggal</label>
+            <input type="date" id="datePicker" class="form-control">
+        </div>
+
+        <div class="col-md-3">
+            <label for="filterStatus" class="form-label">Filter Status</label>
+            <select id="filterStatus" class="form-select">
+                <option value="all">Semua</option>
+                <option value="Hadir">Hadir</option>
+                <option value="Tidak Hadir">Tidak Hadir</option>
+            </select>
+        </div>
+
+        <div class="col-md-3">
+            <label for="filterMode" class="form-label">Filter Mode</label>
+            <select id="filterMode" class="form-select">
+                <option value="all">Semua</option>
+                <option value="online">Online</option>
+                <option value="offline">Offline</option>
+            </select>
+        </div>
+    </div>
+
+
+    <!-- TABEL ABSENSI -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h3 class="card-title">Rekap Absensi</h3>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-vcenter table-hover table-fixed">
+                <thead>
+                    <tr>
+                        <th style="width:110px">UID</th>
+                        <th>Nama</th>
+                        <th style="width:130px">Status</th>
+                        <th style="width:130px">Waktu</th>
+                        <th style="width:120px">Mode</th>
+                    </tr>
+                </thead>
+                <tbody id="absensiBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+
+    <!-- WHITELIST -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Whitelist Mahasiswa</h3>
+            <div class="card-actions">
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#mhsModal">+ Tambah</button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-vcenter table-hover">
+                <thead>
+                    <tr>
+                        <th>UID</th>
+                        <th>Nama</th>
+                        <th style="width:120px">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="mhsBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+</div>
+
+
+<!-- MODAL MAHASISWA -->
+<div class="modal fade" id="mhsModal" tabindex="-1">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <form id="mhsForm" class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Tambah Mahasiswa</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            
+            <div class="modal-body">
+                <label for="mhsUid" class="form-label">UID</label>
+                <input id="mhsUid" class="form-control" required>
+
+                <label for="mhsNama" class="form-label mt-2">Nama</label>
+                <input id="mhsNama" class="form-control" required>
+
+                <input type="hidden" id="isEdit" value="false">
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-link" data-bs-dismiss="modal">Batal</button>
+                <button type="submit" class="btn btn-primary">Simpan</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<!-- Firebase -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.2/firebase-app.js";
+import {
+  getDatabase, ref, onValue, set, update, remove
+} from "https://www.gstatic.com/firebasejs/10.7.2/firebase-database.js";
+
+
+// =========== CONFIG (ISI SENDIRI) ===========
+const firebaseConfig = {
+  apiKey: "AIzaSyACXxe8hd-WzVxV460hDe20f2BQJDvy1AI",
+  authDomain: "absensi-iot-rfid.firebaseapp.com",
+  databaseURL: "https://absensi-iot-rfid-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "absensi-iot-rfid",
+  storageBucket: "absensi-iot-rfid.firebasestorage.app",
+  messagingSenderId: "830107222332",
+  appId: "1:830107222332:web:afcfe28627910805a69e39"
+};
+// ============================================
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+let mahasiswaList = {};
+let absensiList = {};
+
+const absensiBody = document.getElementById("absensiBody");
+const mhsBody = document.getElementById("mhsBody");
+
+const filterStatus = document.getElementById("filterStatus");
+const filterMode   = document.getElementById("filterMode");
+
+
+// ================ LOAD MAHASISWA ===============
+onValue(ref(db, "Mahasiswa"), snap => {
+    mahasiswaList = snap.val() || {};
+    renderAbsensiTable();
+    renderMhsTable();
+});
+
+
+// ================ LOAD ABSENSI =================
+function loadAbsensiForDate(date) {
+    onValue(ref(db, "Absensi/" + date), snap => {
+        absensiList = snap.val() || {};
+        renderAbsensiTable();
+    });
+}
+
+
+// ================ RENDER ABSENSI ===============
+function renderAbsensiTable() {
+    absensiBody.innerHTML = "";
+
+    Object.keys(mahasiswaList).forEach(uid => {
+        const mhs = mahasiswaList[uid];
+        const abs = absensiList[uid];
+
+        const status = abs ? abs.status : "Tidak Hadir";
+        const waktu  = abs ? abs.waktu  : "-";
+        const mode   = abs ? (abs.mode || "-") : "-";
+
+        const statusBadge =
+            status === "Hadir"
+            ? `<span class="badge bg-success">Hadir</span>`
+            : `<span class="badge bg-danger">Tidak Hadir</span>`;
+
+        const modeBadge =
+            mode === "online"
+            ? `<span class="badge bg-blue">online</span>`
+            : mode === "offline"
+                ? `<span class="badge bg-orange">offline</span>`
+                : `<span class="badge bg-secondary">-</span>`;
+
+        absensiBody.innerHTML += `
+        <tr data-status="${status}" data-mode="${mode}">
+            <td>${uid}</td>
+            <td>${mhs.nama}</td>
+            <td>${statusBadge}</td>
+            <td>${waktu}</td>
+            <td>${modeBadge}</td>
+        </tr>`;
+    });
+
+    applyFilter();
+}
+
+
+
+// ================ FILTER =================
+function applyFilter() {
+    const s = filterStatus.value;
+    const m = filterMode.value;
+
+    document.querySelectorAll("#absensiBody tr").forEach(tr => {
+        const rowStatus = tr.dataset.status;
+        const rowMode   = tr.dataset.mode;
+
+        const okStatus = (s === "all" || rowStatus === s);
+        const okMode   = (m === "all" || rowMode === m);
+
+        tr.style.display = (okStatus && okMode) ? "" : "none";
+    });
+}
+
+filterStatus.onchange = applyFilter;
+filterMode.onchange   = applyFilter;
+
+
+// ================ RENDER MAHASISWA ===============
+function renderMhsTable() {
+    mhsBody.innerHTML = "";
+
+    Object.keys(mahasiswaList).forEach(uid => {
+        mhsBody.innerHTML += `
+        <tr>
+            <td>${uid}</td>
+            <td>${mahasiswaList[uid].nama}</td>
+            <td>
+                <button class="btn btn-sm btn-warning me-1" onclick="editMhs('${uid}')">Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="delMhs('${uid}')">Hapus</button>
+            </td>
+        </tr>`;
+    });
+}
+
+
+// ================ CRUD MAHASISWA ===============
+window.editMhs = function(uid) {
+    document.getElementById("isEdit").value = "true";
+    document.getElementById("mhsUid").value = uid;
+    document.getElementById("mhsUid").disabled = true;
+    document.getElementById("mhsNama").value = mahasiswaList[uid].nama;
+
+    new bootstrap.Modal(document.getElementById('mhsModal')).show();
+};
+
+window.delMhs = function(uid) {
+    if (confirm("Hapus mahasiswa " + uid + "?")) {
+        remove(ref(db, "Mahasiswa/" + uid));
+    }
+};
+
+document.getElementById("mhsForm").onsubmit = function(e) {
+    e.preventDefault();
+
+    const uid  = document.getElementById("mhsUid").value;
+    const nama = document.getElementById("mhsNama").value;
+    const edit = document.getElementById("isEdit").value === "true";
+
+    const path = ref(db, "Mahasiswa/" + uid);
+
+    if (edit) {
+        update(path, { nama });
+    } else {
+        set(path, { nama });
+    }
+
+    bootstrap.Modal.getInstance(document.getElementById('mhsModal')).hide();
+    document.getElementById("mhsUid").disabled = false;
+};
+
+
+// ================ INIT DATE =================
+function today() {
+    const d = new Date();
+    return d.toISOString().split("T")[0];
+}
+document.getElementById("datePicker").value = today();
+loadAbsensiForDate(today());
+
+document.getElementById("datePicker").onchange = function() {
+    loadAbsensiForDate(this.value);
+};
+
+</script>
+
+<!-- Bootstrap -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>
