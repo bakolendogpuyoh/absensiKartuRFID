@@ -1,5 +1,3 @@
-//duplikasi cache
-
 #include <Arduino.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
@@ -13,6 +11,7 @@
 #include "addons/RTDBHelper.h"
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include "secret.h"
 
 #define BUZZER_PIN 27
 
@@ -27,7 +26,6 @@ FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
 
-const char* API_KEY = "AIzaSyACXxe8hd-WzVxV460hDe20f2BQJDvy1AI";
 const char* DATABASE_URL = "https://absensi-iot-rfid-default-rtdb.asia-southeast1.firebasedatabase.app";
 
 // ==============================
