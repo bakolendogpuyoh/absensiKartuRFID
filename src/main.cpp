@@ -248,7 +248,8 @@ String bacaNamaDariFirebase(String uid) {
   url = db_url;
   url += "Mahasiswa/";
   url += uid;
-  url += "/nama.json";
+  url += "/nama.json?auth=";
+  url += DB_SECRET;
 
   http.begin(url);
   int code = http.GET();
@@ -285,7 +286,9 @@ bool sudahAbsen(String tanggal, String uid) {
   url += tanggal;
   url += "/";
   url += uid;
-  url += ".json";
+  url += ".json?auth=";
+  url += DB_SECRET;
+
 
   http.begin(url);
   int code = http.GET();
@@ -318,7 +321,9 @@ bool kirimKeFirebaseUID(String tanggal, String uid, String jsonPayload) {
   url += tanggal;
   url += "/";
   url += uid;
-  url += ".json";
+  url += ".json?auth=";
+  url += DB_SECRET;
+
 
 
   http.begin(url);
